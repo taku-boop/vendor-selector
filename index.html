@@ -197,6 +197,20 @@ function displayVal(c,v){
   return sub?`${main}(${sub})`:main;
 }
 
+// メモ内のURLを自動でリンクに変換して表示
+function NotesWithLinks({text}){
+  if(!text)return null;
+  const urlRe=/(https?:\/\/[^\s\u3000-\u9fff\uff00-\uffef]+)/g;
+  const parts=text.split(urlRe);
+  return e("p",{style:{margin:"0 0 8px",fontSize:12,color:"var(--text3)",wordBreak:"break-all"}},
+    parts.map((p,i)=>
+      urlRe.test(p)
+        ?e("a",{key:i,href:p,target:"_blank",rel:"noopener noreferrer",style:{color:"var(--accent-text)",textDecoration:"underline"}},p)
+        :p
+    )
+  );
+}
+
 function VendorCard({v,criteria,sel,showBadge,onEdit,onDel}){
   const active=sel?criteria.filter(c=>sel[c.id]):[];
   let score=0;
@@ -221,7 +235,7 @@ function VendorCard({v,criteria,sel,showBadge,onEdit,onDel}){
         v.phone&&e("span",{className:"f ic g4"},e("i",{className:"ti ti-phone",style:{fontSize:12}}),v.phone),
         v.email&&e("span",{className:"f ic g4"},e("i",{className:"ti ti-mail",style:{fontSize:12}}),v.email)
       ),
-      v.notes&&e("p",{style:{margin:"0 0 8px",fontSize:12,color:"var(--text3)"}},v.notes),
+      v.notes&&e(NotesWithLinks,{text:v.notes}),
       e("div",{className:"f g6 fw"},
         criteria.map(c=>{
           const matched=sel&&sel[c.id]&&v[c.id]===sel[c.id]&&(!sel[subKey(c.id)]||v[subKey(c.id)]===sel[subKey(c.id)]);
