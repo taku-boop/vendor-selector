@@ -197,20 +197,6 @@ function displayVal(c,v){
   return sub?`${main}(${sub})`:main;
 }
 
-// メモ内のURLを自動でリンクに変換して表示
-function NotesWithLinks({text}){
-  if(!text)return null;
-  const urlRe=/(https?:\/\/[^\s\u3000-\u9fff\uff00-\uffef]+)/g;
-  const parts=text.split(urlRe);
-  return e("p",{style:{margin:"0 0 8px",fontSize:12,color:"var(--text3)",wordBreak:"break-all"}},
-    parts.map((p,i)=>
-      urlRe.test(p)
-        ?e("a",{key:i,href:p,target:"_blank",rel:"noopener noreferrer",style:{color:"var(--accent-text)",textDecoration:"underline"}},p)
-        :p
-    )
-  );
-}
-
 function VendorCard({v,criteria,sel,showBadge,onEdit,onDel}){
   const active=sel?criteria.filter(c=>sel[c.id]):[];
   let score=0;
@@ -235,7 +221,7 @@ function VendorCard({v,criteria,sel,showBadge,onEdit,onDel}){
         v.phone&&e("span",{className:"f ic g4"},e("i",{className:"ti ti-phone",style:{fontSize:12}}),v.phone),
         v.email&&e("span",{className:"f ic g4"},e("i",{className:"ti ti-mail",style:{fontSize:12}}),v.email)
       ),
-      v.notes&&e(NotesWithLinks,{text:v.notes}),
+      v.notes&&e("p",{style:{margin:"0 0 8px",fontSize:12,color:"var(--text3)"}},v.notes),
       e("div",{className:"f g6 fw"},
         criteria.map(c=>{
           const matched=sel&&sel[c.id]&&v[c.id]===sel[c.id]&&(!sel[subKey(c.id)]||v[subKey(c.id)]===sel[subKey(c.id)]);
@@ -399,6 +385,7 @@ function App(){
   const [urlInput,setUrlInput]=useState(()=>localStorage.getItem(GAS_URL_KEY)||"");
   const [showSettings,setShowSettings]=useState(false);
   const [loadSt,setLoadSt]=useState("setup");
+  const [loadErr,setLoadErr]=useState("");
   const [saving,setSaving]=useState(false);
   const [lastSync,setLastSync]=useState(null);
 
@@ -435,7 +422,7 @@ function App(){
       setVendors(d.vendors||[]);
       setLoadSt("ready");
       setLastSync(new Date());
-    }catch(ex){console.error(ex);setLoadSt("error");}
+    }catch(ex){console.error(ex);setLoadErr(ex.message||String(ex));setLoadSt("error");}
   }
   useEffect(()=>{if(gasUrl)load(gasUrl);else setLoadSt("setup");},[]);
 
@@ -561,10 +548,17 @@ function App(){
         )
       ),
       loadSt==="loading"&&e("div",{style:{textAlign:"center",padding:"3rem"}},e("div",{className:"spin"}),e("p",{style:{color:"var(--text2)"}},"データを読み込んでいます…")),
-      loadSt==="error"&&e("div",{className:"alert a-ng mb16"},
-        e("i",{className:"ti ti-alert-circle",style:{flexShrink:0}}),
-        e("div",null,e("strong",null,"接続エラー"),e("br",null),"URLが正しいか、デプロイ設定（アクセス: 全員）を確認してください。",
-          e("button",{className:"btn btn-outline",style:{marginTop:8,display:"block"},onClick:()=>load(gasUrl)},e("i",{className:"ti ti-refresh"}),"再試行")
+      loadSt==="error"&&e("div",{className:"alert a-ng mb16",style:{flexDirection:"column",alignItems:"stretch"}},
+        e("div",{className:"f ic g8 mb8"},
+          e("i",{className:"ti ti-alert-circle",style:{flexShrink:0}}),
+          e("strong",null,"接続エラー")
+        ),
+        e("p",{style:{marginBottom:8}},"実際のエラー内容:"),
+        e("code",{style:{display:"block",background:"rgba(0,0,0,.08)",padding:"8px 10px",borderRadius:6,fontSize:12,wordBreak:"break-all",marginBottom:10}},loadErr||"（エラー詳細なし）"),
+        e("p",{style:{fontSize:12,marginBottom:10}},"GAS URLをブラウザで直接開いて、JSONが表示されるか確認してください:"),
+        e("div",{className:"f g8 fw"},
+          e("button",{className:"btn btn-outline",onClick:()=>window.open(gasUrl,"_blank")},e("i",{className:"ti ti-external-link"}),"GAS URLをブラウザで開く"),
+          e("button",{className:"btn btn-outline",onClick:()=>load(gasUrl)},e("i",{className:"ti ti-refresh"}),"再試行")
         )
       ),
 
