@@ -85,6 +85,16 @@ label{display:block;font-size:12px;color:var(--text2);margin-bottom:4px}
 .slbl{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
 .empty{color:var(--text3);font-size:14px;text-align:center;padding:2.5rem 0}
 .sub-tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:14px}
+.step-label{font-size:11px;font-weight:700;color:var(--accent-text);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.step-num{width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.tog-h{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 20px;border-radius:var(--r);cursor:pointer;font-size:14px;font-weight:500;background:var(--bg);border:1.5px solid var(--border);color:var(--text);transition:all .15s;font-family:inherit;flex:1}
+.tog-h.on{background:var(--primary);border-color:var(--primary);color:#fff}
+.tog-h:hover:not(.on){border-color:var(--border-s);background:var(--surface)}
+.tog-sub-h{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--r);cursor:pointer;font-size:13px;font-weight:500;background:var(--bg);border:1px solid var(--border);color:var(--text);transition:all .15s;font-family:inherit;flex:1}
+.tog-sub-h.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.sub-tog-wrap{margin-top:12px;padding:12px 16px;background:var(--surface);border-radius:var(--r);border:1px solid var(--accent-bd)}
+.divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--text3);font-size:12px}
+.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--border)}
 .stab{background:none;border:none;border-bottom:2px solid transparent;padding:7px 14px;cursor:pointer;font-size:13px;font-weight:500;color:var(--text2);margin-bottom:-1px;font-family:inherit;transition:color .15s,border-color .15s}
 .stab.on{color:var(--accent-text);border-bottom-color:var(--accent)}
 .opt-row{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px}
@@ -390,12 +400,24 @@ function App(){
 
   function normCriteria(list){return (list||[]).map(c=>({sub:{},...c}));}
 
+  // GASのデフォルトに工法が含まれていない場合に備え、不足分を補完する
+  function mergeCriteria(loaded){
+    const result=[...loaded];
+    DEFAULT_CRITERIA.forEach((def,i)=>{
+      if(!result.find(c=>c.id===def.id)){
+        result.splice(i,0,def);
+      }
+    });
+    return result;
+  }
+
   async function load(url){
     if(!url)return;
     setLoadSt("loading");
     try{
       const d=await gasGet(url);
-      setCriteria(d.criteria&&d.criteria.length?normCriteria(d.criteria):DEFAULT_CRITERIA);
+      const raw=d.criteria&&d.criteria.length?normCriteria(d.criteria):DEFAULT_CRITERIA;
+      setCriteria(mergeCriteria(raw));
       setVendors(d.vendors||[]);
       setLoadSt("ready");
       setLastSync(new Date());
@@ -535,21 +557,45 @@ function App(){
       /* ── SELECT TAB ── */
       (loadSt==="ready"||loadSt==="setup")&&tab==="select"&&e("div",null,
         criteria.length===0?e("div",{className:"card"},e("p",{className:"empty"},"「選定項目の設定」タブで項目を追加してください")):null,
-        processCrit&&e("div",{className:"card card-accent",style:{marginBottom:14}},
-          e("div",{className:"f ic g8 mb12"},
-            e("i",{className:"ti ti-tool",style:{color:"var(--accent-text)",fontSize:18}}),
-            e("span",{style:{fontSize:14,fontWeight:600,color:"var(--text)"}},processCrit.label),
-            e("span",{style:{fontSize:11,color:"var(--text3)"}},"（まずこれで絞り込み）")
+
+        /* STEP1: 工法 */
+        processCrit&&e("div",{className:"card",style:{marginBottom:14}},
+          e("div",{className:"step-label"},e("span",{className:"step-num"},"1"),`${processCrit.label}を選ぶ`),
+          e("div",{className:"f g10 fw"},
+            processCrit.options.map(o=>e("button",{key:o,
+              className:"tog-h"+(sel[processCrit.id]===o?" on":""),
+              onClick:()=>setSelField(processCrit.id, sel[processCrit.id]===o?null:o, subKey(processCrit.id), null)
+            },
+              sel[processCrit.id]===o&&e("i",{className:"ti ti-check",style:{fontSize:13}}), o,
+              processCrit.sub&&processCrit.sub[o]&&processCrit.sub[o].length>0&&e("i",{className:"ti ti-chevron-down",style:{fontSize:12,opacity:.6}})
+            ))
           ),
-          e("div",{style:{display:"grid",gridTemplateColumns:`repeat(${Math.min(processCrit.options.length,4)},1fr)`,gap:10},className:"cg"},
-            e(CritGroup,{c:processCrit,values:sel,onSet:setSelField})
-          )
+          /* サブ項目（例: FDM / 粉末造形） */
+          (()=>{
+            const subOpts=processCrit.sub&&sel[processCrit.id]?processCrit.sub[sel[processCrit.id]]:[];
+            return subOpts&&subOpts.length>0&&e("div",{className:"sub-tog-wrap"},
+              e("p",{style:{fontSize:12,color:"var(--accent-text)",marginBottom:8,fontWeight:600}}),`${sel[processCrit.id]} の種類を選ぶ（任意）`,
+              e("div",{className:"f g8 fw"},
+                subOpts.map(so=>e("button",{key:so,
+                  className:"tog-sub-h"+(sel[subKey(processCrit.id)]===so?" on":""),
+                  onClick:()=>setSelField(subKey(processCrit.id), sel[subKey(processCrit.id)]===so?null:so)
+                },
+                  sel[subKey(processCrit.id)]===so&&e("i",{className:"ti ti-check",style:{fontSize:12}}), so
+                ))
+              )
+            );
+          })()
         ),
-        otherCrit.length>0&&e("div",{style:{display:"grid",gridTemplateColumns:`repeat(${Math.min(otherCrit.length,3)},1fr)`,gap:12,marginBottom:14,alignItems:"start"},className:"cg"},
-          otherCrit.map(c=>e("div",{key:c.id,className:"card"},
-            e("p",{className:"slbl"},c.label),
-            e(CritGroup,{c,values:sel,onSet:setSelField})
-          ))
+
+        /* STEP2: その他の絞り込み */
+        otherCrit.length>0&&e("div",null,
+          e("div",{className:"step-label"},e("span",{className:"step-num"},"2"),"条件を絞り込む"),
+          e("div",{style:{display:"grid",gridTemplateColumns:`repeat(${Math.min(otherCrit.length,3)},1fr)`,gap:12,marginBottom:14,alignItems:"start"},className:"cg"},
+            otherCrit.map(c=>e("div",{key:c.id,className:"card"},
+              e("p",{className:"slbl"},c.label),
+              e(CritGroup,{c,values:sel,onSet:setSelField})
+            ))
+          )
         ),
         e("p",{style:{fontSize:12,color:"var(--text3)",marginBottom:10}},
           activeCount()===0?"条件未選択の場合は全件表示されます":
