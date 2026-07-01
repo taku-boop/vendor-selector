@@ -108,7 +108,6 @@ if(typeof pdfjsLib!=='undefined')pdfjsLib.GlobalWorkerOptions.workerSrc='https:/
 const {useState,useEffect,useRef}=React;
 const e=React.createElement;
 
-/* criteria item shape: { id, label, options:[string], sub:{ [optionLabel]: [string,...] } } */
 const DEFAULT_CRITERIA=[
   {id:"process", label:"工法", options:["切削","板金","3Dプリンター"], sub:{"3Dプリンター":["FDM","粉末造形","光造形(SLA)"]}},
   {id:"price",    label:"価格", options:["安い","普通","高い"], sub:{}},
@@ -118,20 +117,36 @@ const DEFAULT_CRITERIA=[
 const GAS_URL_KEY="xef-gas-url";
 const subKey=(id)=>`${id}__sub`;
 
-async function gasGet(url){const r=await fetch(url,{cache:"no-cache"});const d=await r.json();if(!d.ok&&d.error)throw new Error(d.error);return d;}
-async function gasPost(url,action,data){const r=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action,data})});const d=await r.json();if(!d.ok&&d.error)throw new Error(d.error);return d;}
+/* 修正点：redirect: "follow" を追加してGoogleリダイレクトエラーを防ぐ */
+async function gasGet(url){
+  const r=await fetch(url,{cache:"no-cache", redirect: "follow"});
+  const d=await r.json();
+  if(!d.ok&&d.error)throw new Error(d.error);
+  return d;
+}
+async function gasPost(url,action,data){
+  const r=await fetch(url,{
+    method:"POST",
+    headers:{"Content-Type":"text/plain"},
+    body:JSON.stringify({action,data}),
+    redirect: "follow"
+  });
+  const d=await r.json();
+  if(!d.ok&&d.error)throw new Error(d.error);
+  return d;
+}
 
 function uid(p){return`${p}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;}
 function np(s){return s.replace(/[（(）)\s]/g,"").replace(/[−ー]/g,"-");}
 function exBlock(b){
   const pr=/(\(?\d{2,4}\)?[-−ー()\s・]\d{1,4}[-−ー\s・]\d{3,4})/g;
   const er=/([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/gi;
-  const cr=/(?:株式会社|有限会社|合同会社|一般社団法人|医療法人)[^\s\n　,、。（(【「\r]{0,20}|[^\s\n　,、。（(【「\r]{1,20}(?:株式会社|有限会社|合同会社)/g;
+  const cr=/(?:株式会社|有限会社|合同会社|一般社団法人|医療法人)[^\s\n ,、。（(【「\r]{0,20}|[^\s\n ,、。（(【「\r]{1,20}(?:株式会社|有限会社|合同会社)/g;
   const phones=[...b.matchAll(pr)].map(m=>np(m[1]));
   const emails=[...b.matchAll(er)].map(m=>m[1]);
   const cos=[...b.matchAll(cr)].map(m=>m[0].trim());
   let ct="";
-  for(const re of[/担当者?\s*[：:]\s*([^\s\n　,、。]{2,8})/,/氏名\s*[：:]\s*([^\s\n　,、。]{2,8})/]){const m=b.match(re);if(m){ct=m[1];break;}}
+  for(const re of[/担当者?\s*[：:]\s*([^\s\n ,、。]{2,8})/,/氏名\s*[：:]\s*([^\s\n ,、。]{2,8})/]){const m=b.match(re);if(m){ct=m[1];break;}}
   return{name:cos[0]||"",contact:ct,phone:phones[0]||"",email:emails[0]||"",specialty:"",notes:""};
 }
 function parseTxt(txt){return txt.trim().split(/\n[ \t]*\n+/).map(b=>({id:uid("t"),...exBlock(b)})).filter(v=>v.name||v.phone||v.email);}
@@ -158,9 +173,7 @@ async function parseFile(file){
   return file.name.toLowerCase().endsWith(".pdf")?await parsePDF(ab):parseXL(ab);
 }
 
-/* ── Hierarchical toggle group (used in 選定する and フォーム) ── */
 function CritGroup({c,values,onSet}){
-  // values: {[c.id]: mainVal, [c.id__sub]: subVal}
   const mainVal=values[c.id];
   const subOpts=(c.sub&&mainVal&&c.sub[mainVal])||[];
   return e("div",null,
@@ -177,7 +190,6 @@ function CritGroup({c,values,onSet}){
   );
 }
 
-/* ── select-element version for forms (compact) ── */
 function CritSelect({c,values,onSet}){
   const mainVal=values[c.id]||c.options[0]||"";
   const subOpts=(c.sub&&c.sub[mainVal])||[];
@@ -297,7 +309,6 @@ function ImportPanel({criteria,onClose,onImport}){
   );
 }
 
-/* ── CRITERIA EDITOR (with sub-option support) ── */
 function CriteriaEditor({criteria,onChange}){
   const uL=(id,v)=>onChange(criteria.map(c=>c.id===id?{...c,label:v}:c));
   const uO=(id,i,v)=>onChange(criteria.map(c=>{
@@ -319,7 +330,6 @@ function CriteriaEditor({criteria,onChange}){
   const dC=(id)=>{if(!confirm("この項目を削除しますか？"))return;onChange(criteria.filter(c=>c.id!==id));};
   const mv=(id,dir)=>{const idx=criteria.findIndex(c=>c.id===id);const nx=idx+dir;if(nx<0||nx>=criteria.length)return;const a=[...criteria];[a[idx],a[nx]]=[a[nx],a[idx]];onChange(a);};
 
-  // sub-option editing
   const addSub=(critId,optLabel)=>onChange(criteria.map(c=>{
     if(c.id!==critId)return c;
     const cur=c.sub[optLabel]||[];
@@ -340,7 +350,7 @@ function CriteriaEditor({criteria,onChange}){
   const enableSub=(critId,optLabel)=>onChange(criteria.map(c=>c.id===critId?{...c,sub:{...c.sub,[optLabel]:["種類1"]}}:c));
 
   return e("div",null,
-    e("div",{className:"alert a-info mb16"},e("i",{className:"ti ti-info-circle",style:{flexShrink:0}}),"項目・選択肢を追加・変更すると「選定する」「外注先管理」に自動反映され、全員に共有されます。選択肢の右の「サブ項目を追加」で、例えば「3Dプリンター」を選んだ時だけ出る「FDM／粉末造形」のような二段階選択を作れます。"),
+    e("div",{className:"alert a-info mb16"},e("i",{className:"ti ti-info-circle",style:{flexShrink:0}}),"項目・選択肢を追加・変更すると「選定する」「外注先管理」に自動反映され、全員に共有されます。選択肢の右の「サブ項目を追加」で、二段階選択を作れます。"),
     e("div",{className:"stack"},
       criteria.map((c,idx)=>e("div",{key:c.id,className:"card"},
         e("div",{className:"f ic g8 mb12"},
@@ -401,7 +411,6 @@ function App(){
 
   function normCriteria(list){return (list||[]).map(c=>({sub:{},...c}));}
 
-  // GASのデフォルトに工法が含まれていない場合に備え、不足分を補完する
   function mergeCriteria(loaded){
     const result=[...loaded];
     DEFAULT_CRITERIA.forEach((def,i)=>{
@@ -478,7 +487,7 @@ function App(){
   function openAdd(){setForm(emptyForm());setIsEdit(false);setShowForm(true);setShowImport(false);}
   function openEdit(v){setForm({...emptyForm(),...v});setIsEdit(true);setShowForm(true);setShowImport(false);}
   async function submitForm(){if(!form.name.trim())return;await saveVend(isEdit?vendors.map(v=>v.id===form.id?form:v):[...vendors,form]);setShowForm(false);}
-  async function delVendor(id){if(!confirm("この外注先を削除しますか？\n（削除すると全員のデータから消えます）"))return;await saveVend(vendors.filter(v=>v.id!==id));}
+  async function delVendor(id){if(!confirm("この外注先を削除しますか？"))return;await saveVend(vendors.filter(v=>v.id!==id));}
   async function handleImport(list,mode){
     const withDefaults=list.map(v=>{
       const f={};criteria.forEach(c=>{f[c.id]=c.options[0]||"";f[subKey(c.id)]="";});
@@ -513,7 +522,7 @@ function App(){
 
     showSettings&&e("div",{className:"settings-bar"},
       e("div",{className:"f1"},
-        e("label",null,"Google Apps Script のウェブアプリURL（全員が同じURLを設定）"),
+        e("label",null,"Google Apps Script のウェブアプリURL"),
         e("input",{value:urlInput,onChange:ev=>setUrlInput(ev.target.value),placeholder:"https://script.google.com/macros/s/…/exec",onKeyDown:ev=>ev.key==="Enter"&&saveUrl()})
       ),
       e("button",{className:"btn btn-primary",onClick:saveUrl},e("i",{className:"ti ti-plug"}),"接続する"),
@@ -536,12 +545,12 @@ function App(){
           e("i",{className:"ti ti-plug",style:{fontSize:20,color:"var(--accent)"}}),
           e("span",{style:{fontSize:15,fontWeight:600}},"Google Sheets に接続して全員でデータ共有する")
         ),
-        e("div",{className:"alert a-info mb12"},e("i",{className:"ti ti-info-circle",style:{flexShrink:0}}),"未接続のままだとこのブラウザだけのデータになります。下記手順で接続すると、誰が入力・編集しても同じデータを全員が見られます。"),
-        e("p",{style:{fontSize:13,color:"var(--text2)",marginBottom:8,fontWeight:600}},"【セットアップ手順（1回だけ）】"),
+        e("div",{className:"alert a-info mb12"},e("i",{className:"ti ti-info-circle",style:{flexShrink:0}}),"未接続のままだとこのブラウザだけのデータになります。"),
+        e("p",{style:{fontSize:13,color:"var(--text2)",marginBottom:8,fontWeight:600}},"【セットアップ手順】"),
         e("ol",{style:{paddingLeft:20,fontSize:13,color:"var(--text2)",lineHeight:2,marginBottom:12}},
           e("li",null,"Google スプレッドシートを新規作成"),
           e("li",null,"「拡張機能」→「Apps Script」を開く"),
-          e("li",null,"配布した gas-code.gs の内容を貼り付けて保存"),
+          e("li",null,"コードをすべて消して新しいGASコードを貼り付けて保存"),
           e("li",null,"「デプロイ」→「新しいデプロイ」→ 種類:ウェブアプリ／実行:自分／アクセス:全員 でデプロイ"),
           e("li",null,"発行されたウェブアプリURLをコピー"),
           e("li",null,"右上の「接続設定」にURLを貼り付けて「接続する」")
@@ -562,11 +571,9 @@ function App(){
         )
       ),
 
-      /* ── SELECT TAB ── */
       (loadSt==="ready"||loadSt==="setup")&&tab==="select"&&e("div",null,
         criteria.length===0?e("div",{className:"card"},e("p",{className:"empty"},"「選定項目の設定」タブで項目を追加してください")):null,
 
-        /* STEP1: 工法 */
         processCrit&&e("div",{className:"card",style:{marginBottom:14}},
           e("div",{className:"step-label"},e("span",{className:"step-num"},"1"),`${processCrit.label}を選ぶ`),
           e("div",{className:"f g10 fw"},
@@ -578,7 +585,6 @@ function App(){
               processCrit.sub&&processCrit.sub[o]&&processCrit.sub[o].length>0&&e("i",{className:"ti ti-chevron-down",style:{fontSize:12,opacity:.6}})
             ))
           ),
-          /* サブ項目（例: FDM / 粉末造形） */
           (()=>{
             const subOpts=processCrit.sub&&sel[processCrit.id]?processCrit.sub[sel[processCrit.id]]:[];
             return subOpts&&subOpts.length>0&&e("div",{className:"sub-tog-wrap"},
@@ -595,7 +601,6 @@ function App(){
           })()
         ),
 
-        /* STEP2: その他の絞り込み */
         otherCrit.length>0&&e("div",null,
           e("div",{className:"step-label"},e("span",{className:"step-num"},"2"),"条件を絞り込む"),
           e("div",{style:{display:"grid",gridTemplateColumns:`repeat(${Math.min(otherCrit.length,3)},1fr)`,gap:12,marginBottom:14,alignItems:"start"},className:"cg"},
@@ -607,7 +612,7 @@ function App(){
         ),
         e("p",{style:{fontSize:12,color:"var(--text3)",marginBottom:10}},
           activeCount()===0?"条件未選択の場合は全件表示されます":
-          `選択中: ${criteria.filter(c=>sel[c.id]).map(c=>`${c.label}「${displayVal(c,{[c.id]:sel[c.id],[subKey(c.id)]:sel[subKey(c.id)]})}」`).join("　")}`
+          `選択中: ${criteria.filter(c=>sel[c.id]).map(c=>`${c.label}「${displayVal(c,{[c.id]:sel[c.id],[subKey(c.id)]:sel[subKey(c.id)]})}」`).join(" ")}`
         ),
         e("button",{className:"btn btn-primary btn-full mb16",onClick:doSelect},e("i",{className:"ti ti-search"}),"外注先を選定する"),
         results&&e("div",null,
@@ -616,7 +621,6 @@ function App(){
         )
       ),
 
-      /* ── MANAGE TAB ── */
       (loadSt==="ready"||loadSt==="setup")&&tab==="manage"&&e("div",null,
         !showForm&&!showImport&&e("div",{className:"f g8 mb16 fw"},
           e("button",{className:"btn btn-ao",onClick:()=>setShowImport(true)},e("i",{className:"ti ti-file-import"}),"読み込む（貼付・ファイル）"),
@@ -651,7 +655,6 @@ function App(){
           :e("div",{className:"stack"},vendors.map(v=>e(VendorCard,{key:v.id,v,criteria,sel:null,showBadge:false,onEdit:openEdit,onDel:delVendor})))
       ),
 
-      /* ── CRITERIA TAB ── */
       (loadSt==="ready"||loadSt==="setup")&&tab==="criteria"&&e(CriteriaEditor,{criteria,onChange:saveCrit})
     )
   );
