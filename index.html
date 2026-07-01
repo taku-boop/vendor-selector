@@ -69,6 +69,7 @@ label{display:block;font-size:12px;color:var(--text2);margin-bottom:4px}
 .a-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
 .a-ng{background:var(--ng-bg);color:var(--ng);border:1px solid var(--ng-bd)}
 .a-info{background:var(--accent-bg);color:var(--accent-text);border:1px solid var(--accent-bd)}
+.a-warn{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-bd)}
 .drop{border:2px dashed var(--border-s);border-radius:var(--rlg);padding:2.5rem;text-align:center;cursor:pointer;background:var(--bg);transition:border-color .15s,background .15s}
 .drop:hover{border-color:var(--accent);background:var(--accent-bg)}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -93,8 +94,6 @@ label{display:block;font-size:12px;color:var(--text2);margin-bottom:4px}
 .tog-sub-h{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--r);cursor:pointer;font-size:13px;font-weight:500;background:var(--bg);border:1px solid var(--border);color:var(--text);transition:all .15s;font-family:inherit;flex:1}
 .tog-sub-h.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .sub-tog-wrap{margin-top:12px;padding:12px 16px;background:var(--surface);border-radius:var(--r);border:1px solid var(--accent-bd)}
-.divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--text3);font-size:12px}
-.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--border)}
 .stab{background:none;border:none;border-bottom:2px solid transparent;padding:7px 14px;cursor:pointer;font-size:13px;font-weight:500;color:var(--text2);margin-bottom:-1px;font-family:inherit;transition:color .15s,border-color .15s}
 .stab.on{color:var(--accent-text);border-bottom-color:var(--accent)}
 .opt-row{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px}
@@ -109,28 +108,22 @@ const {useState,useEffect,useRef}=React;
 const e=React.createElement;
 
 const DEFAULT_CRITERIA=[
-  {id:"process", label:"工法", options:["切削","板金","3Dプリンター"], sub:{"3Dプリンター":["FDM","粉末造形","光造形(SLA)"]}},
-  {id:"price",    label:"価格", options:["安い","普通","高い"], sub:{}},
-  {id:"delivery", label:"納期", options:["早い","普通","遅い"], sub:{}},
-  {id:"quality",  label:"精度", options:["高い","普通","悪い"], sub:{}},
+  {id:"process",label:"工法",options:["切削","板金","3Dプリンター"],sub:{"3Dプリンター":["FDM","粉末造形","光造形(SLA)"]}},
+  {id:"price",label:"価格",options:["安い","普通","高い"],sub:{}},
+  {id:"delivery",label:"納期",options:["早い","普通","遅い"],sub:{}},
+  {id:"quality",label:"精度",options:["高い","普通","悪い"],sub:{}},
 ];
 const GAS_URL_KEY="xef-gas-url";
 const subKey=(id)=>`${id}__sub`;
 
-/* 修正点：redirect: "follow" を追加してGoogleリダイレクトエラーを防ぐ */
 async function gasGet(url){
-  const r=await fetch(url,{cache:"no-cache", redirect: "follow"});
+  const r=await fetch(url,{cache:"no-cache",redirect:"follow"});
   const d=await r.json();
   if(!d.ok&&d.error)throw new Error(d.error);
   return d;
 }
 async function gasPost(url,action,data){
-  const r=await fetch(url,{
-    method:"POST",
-    headers:{"Content-Type":"text/plain"},
-    body:JSON.stringify({action,data}),
-    redirect: "follow"
-  });
+  const r=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action,data}),redirect:"follow"});
   const d=await r.json();
   if(!d.ok&&d.error)throw new Error(d.error);
   return d;
@@ -210,7 +203,9 @@ function displayVal(c,v){
 }
 
 function VendorCard({v,criteria,sel,showBadge,onEdit,onDel}){
-  const active=sel?criteria.filter(c=>sel[c.id]):[];
+  // 工法以外の条件でスコアを計算
+  const otherCrit=criteria.filter(c=>c.id!=="process");
+  const active=sel?otherCrit.filter(c=>sel[c.id]):[];
   let score=0;
   active.forEach(c=>{
     if(v[c.id]!==sel[c.id])return;
@@ -233,7 +228,7 @@ function VendorCard({v,criteria,sel,showBadge,onEdit,onDel}){
         v.phone&&e("span",{className:"f ic g4"},e("i",{className:"ti ti-phone",style:{fontSize:12}}),v.phone),
         v.email&&e("span",{className:"f ic g4"},e("i",{className:"ti ti-mail",style:{fontSize:12}}),v.email)
       ),
-      v.notes&&e("p",{style:{margin:"0 0 8px",fontSize:12,color:"var(--text3)"}},v.notes),
+      v.notes&&e("p",{style:{margin:"0 0 8px",fontSize:12,color:"var(--text3)",wordBreak:"break-all"}},v.notes),
       e("div",{className:"f g6 fw"},
         criteria.map(c=>{
           const matched=sel&&sel[c.id]&&v[c.id]===sel[c.id]&&(!sel[subKey(c.id)]||v[subKey(c.id)]===sel[subKey(c.id)]);
@@ -329,28 +324,12 @@ function CriteriaEditor({criteria,onChange}){
   const aC=()=>onChange([...criteria,{id:uid("c"),label:"新しい項目",options:["選択肢1","選択肢2"],sub:{}}]);
   const dC=(id)=>{if(!confirm("この項目を削除しますか？"))return;onChange(criteria.filter(c=>c.id!==id));};
   const mv=(id,dir)=>{const idx=criteria.findIndex(c=>c.id===id);const nx=idx+dir;if(nx<0||nx>=criteria.length)return;const a=[...criteria];[a[idx],a[nx]]=[a[nx],a[idx]];onChange(a);};
-
-  const addSub=(critId,optLabel)=>onChange(criteria.map(c=>{
-    if(c.id!==critId)return c;
-    const cur=c.sub[optLabel]||[];
-    return{...c,sub:{...c.sub,[optLabel]:[...cur,"新しい種類"]}};
-  }));
-  const updSub=(critId,optLabel,i,val)=>onChange(criteria.map(c=>{
-    if(c.id!==critId)return c;
-    const cur=(c.sub[optLabel]||[]).map((s,j)=>j===i?val:s);
-    return{...c,sub:{...c.sub,[optLabel]:cur}};
-  }));
-  const delSub=(critId,optLabel,i)=>onChange(criteria.map(c=>{
-    if(c.id!==critId)return c;
-    const cur=(c.sub[optLabel]||[]).filter((_,j)=>j!==i);
-    const newSub={...c.sub,[optLabel]:cur};
-    if(cur.length===0)delete newSub[optLabel];
-    return{...c,sub:newSub};
-  }));
+  const addSub=(critId,optLabel)=>onChange(criteria.map(c=>{if(c.id!==critId)return c;const cur=c.sub[optLabel]||[];return{...c,sub:{...c.sub,[optLabel]:[...cur,"新しい種類"]}};}));
+  const updSub=(critId,optLabel,i,val)=>onChange(criteria.map(c=>{if(c.id!==critId)return c;const cur=(c.sub[optLabel]||[]).map((s,j)=>j===i?val:s);return{...c,sub:{...c.sub,[optLabel]:cur}};}));
+  const delSub=(critId,optLabel,i)=>onChange(criteria.map(c=>{if(c.id!==critId)return c;const cur=(c.sub[optLabel]||[]).filter((_,j)=>j!==i);const newSub={...c.sub,[optLabel]:cur};if(cur.length===0)delete newSub[optLabel];return{...c,sub:newSub};}));
   const enableSub=(critId,optLabel)=>onChange(criteria.map(c=>c.id===critId?{...c,sub:{...c.sub,[optLabel]:["種類1"]}}:c));
-
   return e("div",null,
-    e("div",{className:"alert a-info mb16"},e("i",{className:"ti ti-info-circle",style:{flexShrink:0}}),"項目・選択肢を追加・変更すると「選定する」「外注先管理」に自動反映され、全員に共有されます。選択肢の右の「サブ項目を追加」で、二段階選択を作れます。"),
+    e("div",{className:"alert a-info mb16"},e("i",{className:"ti ti-info-circle",style:{flexShrink:0}}),"項目・選択肢を追加・変更すると「選定する」「外注先管理」に自動反映され、全員に共有されます。"),
     e("div",{className:"stack"},
       criteria.map((c,idx)=>e("div",{key:c.id,className:"card"},
         e("div",{className:"f ic g8 mb12"},
@@ -398,7 +377,6 @@ function App(){
   const [loadErr,setLoadErr]=useState("");
   const [saving,setSaving]=useState(false);
   const [lastSync,setLastSync]=useState(null);
-
   const [tab,setTab]=useState("select");
   const [criteria,setCriteria]=useState(DEFAULT_CRITERIA);
   const [vendors,setVendors]=useState([]);
@@ -410,14 +388,9 @@ function App(){
   const [isEdit,setIsEdit]=useState(false);
 
   function normCriteria(list){return (list||[]).map(c=>({sub:{},...c}));}
-
   function mergeCriteria(loaded){
     const result=[...loaded];
-    DEFAULT_CRITERIA.forEach((def,i)=>{
-      if(!result.find(c=>c.id===def.id)){
-        result.splice(i,0,def);
-      }
-    });
+    DEFAULT_CRITERIA.forEach((def,i)=>{if(!result.find(c=>c.id===def.id))result.splice(i,0,def);});
     return result;
   }
 
@@ -452,52 +425,58 @@ function App(){
   async function saveVend(v){setVendors(v);await remotePost("saveVendors",v);}
 
   function setSelField(...pairs){
-    setSel(p=>{
-      const np={...p};
-      for(let i=0;i<pairs.length;i+=2)np[pairs[i]]=pairs[i+1];
-      return np;
-    });
+    setSel(p=>{const np={...p};for(let i=0;i<pairs.length;i+=2)np[pairs[i]]=pairs[i+1];return np;});
     setResults(null);
   }
-  function doSelect(){
-    setResults(vendors.map(v=>({...v})).sort((a,b)=>{
-      const sc=(v)=>{
-        let s=0;
-        criteria.forEach(c=>{
-          if(!sel[c.id])return;
-          if(v[c.id]!==sel[c.id])return;
-          const needSub=sel[subKey(c.id)];
-          if(needSub){if(v[subKey(c.id)]===needSub)s++;}else s++;
-        });
-        return s;
-      };
-      return sc(b)-sc(a);
-    }));
-  }
-  function activeCount(){return criteria.filter(c=>sel[c.id]).length;}
 
+  function doSelect(){
+    const processCrit=criteria.find(c=>c.id==="process");
+    const otherCrit=criteria.filter(c=>c.id!=="process");
+
+    // 工法が選ばれていたら、その工法に一致する外注先のみに絞り込む
+    let filtered=vendors;
+    if(processCrit&&sel[processCrit.id]){
+      filtered=vendors.filter(v=>{
+        if(v[processCrit.id]!==sel[processCrit.id])return false;
+        // サブ項目も選ばれていたら、サブ項目も一致するものだけ
+        const selSub=sel[subKey(processCrit.id)];
+        if(selSub&&v[subKey(processCrit.id)]!==selSub)return false;
+        return true;
+      });
+    }
+
+    // その他の条件でスコアを計算してソート
+    const active=otherCrit.filter(c=>sel[c.id]);
+    const scored=filtered.map(v=>{
+      let s=0;
+      active.forEach(c=>{
+        if(v[c.id]!==sel[c.id])return;
+        const needSub=sel[subKey(c.id)];
+        if(needSub){if(v[subKey(c.id)]===needSub)s++;}else s++;
+      });
+      return{...v,_s:s,_t:active.length};
+    }).sort((a,b)=>b._s-a._s);
+
+    setResults(scored);
+  }
+
+  function activeCount(){return criteria.filter(c=>sel[c.id]).length;}
   function emptyForm(){
     const f={id:uid("v"),name:"",contact:"",phone:"",email:"",specialty:"",notes:""};
     criteria.forEach(c=>{f[c.id]=c.options[0]||"";f[subKey(c.id)]="";});
     return f;
   }
-  function setFormField(...pairs){
-    setForm(p=>{const np={...p};for(let i=0;i<pairs.length;i+=2)np[pairs[i]]=pairs[i+1];return np;});
-  }
+  function setFormField(...pairs){setForm(p=>{const np={...p};for(let i=0;i<pairs.length;i+=2)np[pairs[i]]=pairs[i+1];return np;});}
   function openAdd(){setForm(emptyForm());setIsEdit(false);setShowForm(true);setShowImport(false);}
   function openEdit(v){setForm({...emptyForm(),...v});setIsEdit(true);setShowForm(true);setShowImport(false);}
   async function submitForm(){if(!form.name.trim())return;await saveVend(isEdit?vendors.map(v=>v.id===form.id?form:v):[...vendors,form]);setShowForm(false);}
   async function delVendor(id){if(!confirm("この外注先を削除しますか？"))return;await saveVend(vendors.filter(v=>v.id!==id));}
   async function handleImport(list,mode){
-    const withDefaults=list.map(v=>{
-      const f={};criteria.forEach(c=>{f[c.id]=c.options[0]||"";f[subKey(c.id)]="";});
-      return{...f,...v};
-    });
-    await saveVend(mode==="replace"?withDefaults:[...vendors,...withDefaults]);
+    const wd=list.map(v=>{const f={};criteria.forEach(c=>{f[c.id]=c.options[0]||"";f[subKey(c.id)]="";});return{...f,...v};});
+    await saveVend(mode==="replace"?wd:[...vendors,...wd]);
     setShowImport(false);
   }
 
-  const cc=`repeat(${Math.min(criteria.length,3)},1fr)`;
   const processCrit=criteria.find(c=>c.id==="process")||null;
   const otherCrit=criteria.filter(c=>c.id!=="process");
   const dotColor=loadSt==="ready"?"#4ade80":loadSt==="loading"||saving?"#fbbf24":"#f87171";
@@ -509,7 +488,7 @@ function App(){
       e("span",{className:"hdr-title"},"外注先選定ツール"),
       e("span",{className:"hdr-count"},`${vendors.length}社`),
       e("div",{style:{flex:1}}),
-      gasUrl&&e("button",{className:"hdr-btn",onClick:()=>load(gasUrl),title:"再読み込み"},
+      gasUrl&&e("button",{className:"hdr-btn",onClick:()=>load(gasUrl)},
         saving?e("span",{className:"spin-sm"}):e("i",{className:"ti ti-refresh"}),
         e("span",{style:{fontSize:12}},"再読み込み")
       ),
@@ -522,7 +501,7 @@ function App(){
 
     showSettings&&e("div",{className:"settings-bar"},
       e("div",{className:"f1"},
-        e("label",null,"Google Apps Script のウェブアプリURL"),
+        e("label",null,"Google Apps Script のウェブアプリURL（全員が同じURLを設定）"),
         e("input",{value:urlInput,onChange:ev=>setUrlInput(ev.target.value),placeholder:"https://script.google.com/macros/s/…/exec",onKeyDown:ev=>ev.key==="Enter"&&saveUrl()})
       ),
       e("button",{className:"btn btn-primary",onClick:saveUrl},e("i",{className:"ti ti-plug"}),"接続する"),
@@ -558,43 +537,38 @@ function App(){
       ),
       loadSt==="loading"&&e("div",{style:{textAlign:"center",padding:"3rem"}},e("div",{className:"spin"}),e("p",{style:{color:"var(--text2)"}},"データを読み込んでいます…")),
       loadSt==="error"&&e("div",{className:"alert a-ng mb16",style:{flexDirection:"column",alignItems:"stretch"}},
-        e("div",{className:"f ic g8 mb8"},
-          e("i",{className:"ti ti-alert-circle",style:{flexShrink:0}}),
-          e("strong",null,"接続エラー")
-        ),
+        e("div",{className:"f ic g8 mb8"},e("i",{className:"ti ti-alert-circle",style:{flexShrink:0}}),e("strong",null,"接続エラー")),
         e("p",{style:{marginBottom:8}},"実際のエラー内容:"),
         e("code",{style:{display:"block",background:"rgba(0,0,0,.08)",padding:"8px 10px",borderRadius:6,fontSize:12,wordBreak:"break-all",marginBottom:10}},loadErr||"（エラー詳細なし）"),
-        e("p",{style:{fontSize:12,marginBottom:10}},"GAS URLをブラウザで直接開いて、JSONが表示されるか確認してください:"),
         e("div",{className:"f g8 fw"},
           e("button",{className:"btn btn-outline",onClick:()=>window.open(gasUrl,"_blank")},e("i",{className:"ti ti-external-link"}),"GAS URLをブラウザで開く"),
           e("button",{className:"btn btn-outline",onClick:()=>load(gasUrl)},e("i",{className:"ti ti-refresh"}),"再試行")
         )
       ),
 
+      /* ── SELECT TAB ── */
       (loadSt==="ready"||loadSt==="setup")&&tab==="select"&&e("div",null,
-        criteria.length===0?e("div",{className:"card"},e("p",{className:"empty"},"「選定項目の設定」タブで項目を追加してください")):null,
-
         processCrit&&e("div",{className:"card",style:{marginBottom:14}},
           e("div",{className:"step-label"},e("span",{className:"step-num"},"1"),`${processCrit.label}を選ぶ`),
           e("div",{className:"f g10 fw"},
             processCrit.options.map(o=>e("button",{key:o,
               className:"tog-h"+(sel[processCrit.id]===o?" on":""),
-              onClick:()=>setSelField(processCrit.id, sel[processCrit.id]===o?null:o, subKey(processCrit.id), null)
+              onClick:()=>setSelField(processCrit.id,sel[processCrit.id]===o?null:o,subKey(processCrit.id),null)
             },
-              sel[processCrit.id]===o&&e("i",{className:"ti ti-check",style:{fontSize:13}}), o,
+              sel[processCrit.id]===o&&e("i",{className:"ti ti-check",style:{fontSize:13}}),o,
               processCrit.sub&&processCrit.sub[o]&&processCrit.sub[o].length>0&&e("i",{className:"ti ti-chevron-down",style:{fontSize:12,opacity:.6}})
             ))
           ),
           (()=>{
             const subOpts=processCrit.sub&&sel[processCrit.id]?processCrit.sub[sel[processCrit.id]]:[];
             return subOpts&&subOpts.length>0&&e("div",{className:"sub-tog-wrap"},
-              e("p",{style:{fontSize:12,color:"var(--accent-text)",marginBottom:8,fontWeight:600}}),`${sel[processCrit.id]} の種類を選ぶ（任意）`,
+              e("p",{style:{fontSize:12,color:"var(--accent-text)",marginBottom:8,fontWeight:600}},`${sel[processCrit.id]} の種類を選ぶ（任意）`),
               e("div",{className:"f g8 fw"},
                 subOpts.map(so=>e("button",{key:so,
                   className:"tog-sub-h"+(sel[subKey(processCrit.id)]===so?" on":""),
-                  onClick:()=>setSelField(subKey(processCrit.id), sel[subKey(processCrit.id)]===so?null:so)
+                  onClick:()=>setSelField(subKey(processCrit.id),sel[subKey(processCrit.id)]===so?null:so)
                 },
-                  sel[subKey(processCrit.id)]===so&&e("i",{className:"ti ti-check",style:{fontSize:12}}), so
+                  sel[subKey(processCrit.id)]===so&&e("i",{className:"ti ti-check",style:{fontSize:12}}),so
                 ))
               )
             );
@@ -610,17 +584,26 @@ function App(){
             ))
           )
         ),
+
         e("p",{style:{fontSize:12,color:"var(--text3)",marginBottom:10}},
           activeCount()===0?"条件未選択の場合は全件表示されます":
-          `選択中: ${criteria.filter(c=>sel[c.id]).map(c=>`${c.label}「${displayVal(c,{[c.id]:sel[c.id],[subKey(c.id)]:sel[subKey(c.id)]})}」`).join(" ")}`
+          `選択中: ${criteria.filter(c=>sel[c.id]).map(c=>`${c.label}「${displayVal(c,{[c.id]:sel[c.id],[subKey(c.id)]:sel[subKey(c.id)]})}」`).join("　")}`
         ),
         e("button",{className:"btn btn-primary btn-full mb16",onClick:doSelect},e("i",{className:"ti ti-search"}),"外注先を選定する"),
         results&&e("div",null,
-          e("p",{style:{fontSize:13,color:"var(--text3)",marginBottom:12}},`${results.length}件`),
-          e("div",{className:"stack"},results.map(v=>e(VendorCard,{key:v.id,v,criteria,sel,showBadge:true,onEdit:null,onDel:null})))
+          processCrit&&sel[processCrit.id]
+            ? e("p",{style:{fontSize:13,color:"var(--text3)",marginBottom:12}},
+                `工法「${displayVal(processCrit,{[processCrit.id]:sel[processCrit.id],[subKey(processCrit.id)]:sel[subKey(processCrit.id)]})}」に対応する外注先: `,
+                e("strong",{style:{color:"var(--text)"}},`${results.length}社`)
+              )
+            : e("p",{style:{fontSize:13,color:"var(--text3)",marginBottom:12}},`全件表示: `,e("strong",{style:{color:"var(--text)"}},`${results.length}社`)),
+          results.length===0
+            ? e("div",{className:"card"},e("p",{className:"empty"},"条件に一致する外注先が見つかりませんでした"))
+            : e("div",{className:"stack"},results.map(v=>e(VendorCard,{key:v.id,v,criteria,sel,showBadge:true,onEdit:null,onDel:null})))
         )
       ),
 
+      /* ── MANAGE TAB ── */
       (loadSt==="ready"||loadSt==="setup")&&tab==="manage"&&e("div",null,
         !showForm&&!showImport&&e("div",{className:"f g8 mb16 fw"},
           e("button",{className:"btn btn-ao",onClick:()=>setShowImport(true)},e("i",{className:"ti ti-file-import"}),"読み込む（貼付・ファイル）"),
@@ -655,6 +638,7 @@ function App(){
           :e("div",{className:"stack"},vendors.map(v=>e(VendorCard,{key:v.id,v,criteria,sel:null,showBadge:false,onEdit:openEdit,onDel:delVendor})))
       ),
 
+      /* ── CRITERIA TAB ── */
       (loadSt==="ready"||loadSt==="setup")&&tab==="criteria"&&e(CriteriaEditor,{criteria,onChange:saveCrit})
     )
   );
